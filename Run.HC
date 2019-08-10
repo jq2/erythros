@@ -19,6 +19,7 @@
 
 #include "System/Drivers/Net/NetFifo";
 #include "System/Drivers/Net/NativeSocket";
+#include "System/Drivers/Net/Socket";
 
 // L2
 #include "System/Drivers/Net/Ethernet";

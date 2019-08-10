@@ -208,16 +208,8 @@ U0 Shell(EConsole *con)
             }
             ConPrint(con, "%s: command not found\n", argv[0]);
         }
-
 prompt_next:
-		for (_i = 0; _i < argc; _i++)
-		{
-			Free(argv[_i]);
-		}
-		if (argv)
-		{
-			Free(argv);
-		}
+		FreeArgs(argc, argv);
 		if (shell_input_buf)
 		{
 			Free(shell_input_buf);

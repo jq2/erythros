@@ -1,11 +1,3 @@
-// vim: set ft=c:
-
-#exe {
-  if (SNAILNET_NATIVE_DRIVER == NULL) {
-    StreamPrint("#include \"::/Adam/Net/SnailLib\"");
-  }
-}
-
 // Higher-level, utility functions
 
 I64 recvLine(I64 sock, U8* buffer, I64 size, I64 flags) {

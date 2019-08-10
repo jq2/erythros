@@ -1,5 +1,3 @@
-// vim: set ft=c:
-
 #define SOCK_STREAM     1
 #define SOCK_DGRAM      2
 #define SOCK_RAW        3
@@ -9,6 +7,8 @@
 #define AF_INET6        10
 
 #define INADDR_ANY      0
+
+#define NS_INADDRSZ     4 
 
 #define SOL_SOCKET      1
 
@@ -43,6 +43,47 @@ class addrinfo {
   U8*       ai_canonname;
   addrinfo* ai_next;
 };
+
+I64 inet_pton(U8 *src, U8 *end, U8 *dst)
+{
+  I64 saw_digit, octets, ch;
+  U8 tmp[NS_INADDRSZ], *tp;
+  saw_digit = 0;
+  octets = 0;
+  *(tp = tmp) = 0;
+  while (src < end)
+    {
+      ch = *src++;
+      if (ch >= '0' && ch <= '9')
+        {
+          U64 new = *tp * 10 + (ch - '0');
+          if (saw_digit && *tp == 0)
+            return 0;
+          if (new > 255)
+            return 0;
+          *tp = new;
+          if (!saw_digit)
+            {
+              if (++octets > 4)
+                return 0;
+              saw_digit = 1;
+            }
+        }
+      else if (ch == '.' && saw_digit)
+        {
+          if (octets == 4)
+            return 0;
+          *++tp = 0;
+          saw_digit = 0;
+        }
+      else
+        return 0;
+    }
+  if (octets < 4)
+    return 0;
+  MemCpy(dst, tmp, NS_INADDRSZ);
+  return 1;
+}
 
 I64 inet_aton(U8* cp, in_addr* inp) {
   // FIXME: error handling
@@ -250,6 +291,27 @@ I64 create_connection(U8* hostname, U16 port) {
 
   freeaddrinfo(res);
   return -1;
+}
+
+I64 GetAddressForHost(U8 *str, U32 *addr)
+{
+    *addr = NULL;
+    I64 err = NULL;
+    addrinfo* res = NULL;
+    if (!inet_pton(str, str+StrLen(str), addr))
+    {
+        err = getaddrinfo(str, NULL, NULL, &res);
+        if (!err)
+        {
+            *addr = (res->ai_addr(sockaddr_in*))->sin_addr.s_addr;
+        }
+        if (res)
+        {
+          freeaddrinfo(res);
+        }
+        return err;
+    }
+    return 0;
 }
 
 U0 RegisterSocketClass(U16 domain, U16 type, CSocket* (*socket)(U16 domain, U16 type)) {

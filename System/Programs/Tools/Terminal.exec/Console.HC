@@ -1,3 +1,16 @@
+U0 FreeArgs(I64 argc, U8 **argv)
+{
+    I64 i;
+	for (i = 0; i < argc; i++)
+	{
+		Free(argv[i]);
+	}
+	if (argv)
+	{
+		Free(argv);
+	}
+}
+
 U8 **ParseArgs(U8 *str, I64 *argc)
 { // Return argc, argv from str.
 	Bool quoted = FALSE;
@@ -83,6 +96,10 @@ U0 ConColPlot(U32 *buf, I64 x, I64 y, U32 color)
 
 U0 ConPutChar(EConsole *con, U8 ch)
 {
+    if (con->disable_echo)
+    {
+        return;
+    }
     switch (ch)
     {
         case 8:

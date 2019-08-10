@@ -1,7 +1,3 @@
-// vim: set ft=c:
-
-//#include "::/Adam/Net/Socket"
-
 #define BOOTREQUEST             0x01
 #define BOOTREPLY               0x02
 

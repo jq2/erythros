@@ -1,4 +1,3 @@
-
 #define ERR_INVALID_OPT -1
 #define ERR_EXTRA_OPD	-2
 
@@ -133,6 +132,25 @@ U0 _LSPCI_PCILookUpDevs()
       }
 lspci_lud_done:
   DocDel(doc);
+}
+
+I64 CCMD_bgset(EConsole *con, I64 argc, U8 **argv)
+{
+    EContext2D *bg;
+    if (argc < 2)
+    {
+        ConPrint(con, "usage: bgset background-image\n");
+        return 1;
+    }
+    if (!FileFind(argv[1]))
+    {
+        ConPrint(con, "bgset: %s: File not found\n", argv[1]);
+        return 1;
+    }
+    bg = LoadPNG(argv[1]);
+    EWMSetWallpaper(bg);
+    DelContext2D(bg);
+    return 0;
 }
 
 I64 CCMD_cat(EConsole *con, I64 argc, U8 **argv)
@@ -274,6 +292,438 @@ I64 CCMD_exit(EConsole *con, I64 argc, U8 **argv)
 {
     // stub
     return 0;
+}
+
+U8 *_FTP_GetResponse(I64 sock, EConsole *con=NULL)
+{
+    U8 *resp = CAlloc(4096);
+    I64 err = NULL;
+    err = recvLine(sock, resp, 4096, 0);
+    if (err < 0)
+    {
+        close(sock);
+        Free(resp);
+        return NULL;
+    }
+    if (con)
+    {
+        ConPrint(con, "%s\n", resp);
+    }
+    return resp;
+}
+
+I64 _FTP_SetPassiveMode(I64 sock, EConsole *con=NULL)
+{
+    I64 d_port = NULL;
+    U8 *dp_1, *dp_2;
+    U8 *resp;
+    sendString(sock, "PASV\r\n", 0);
+    resp = _FTP_GetResponse(sock, con);
+    StrLastOcc(resp,")")[0]=0;
+    dp_2=StrLastOcc(resp,",")+1;
+    StrLastOcc(resp,",")[0]=0;
+    dp_1=StrLastOcc(resp,",")+1;
+    StrLastOcc(resp,",")[0]=0;
+    d_port=Str2I64(dp_1)*256;
+    d_port+=Str2I64(dp_2);
+    Free(resp);
+    return d_port;
+}
+
+I64 CCMD_ftp(EConsole *con, I64 argc, U8 **argv)
+{
+    Bool im_exit = FALSE;
+    U8 *resp = NULL;
+    U8 *ftp_res = CAlloc(1024);
+    U8 *ftp_cmd = CAlloc(1024);
+    U8 *im_pmt = NULL;
+    I64 im_argc = NULL;
+    I64 size = NULL;
+    U8 *data = NULL;
+    I64 got = 0;
+    I64 step = 0;
+    I64 total = 0;
+    U8 **im_argv = NULL;
+    U8 *dp_1, *dp_2;
+    I64 d_port;
+    I64 c_sock = socket(AF_INET, SOCK_STREAM);
+    I64 d_sock = NULL;
+    I64 err = 0;
+    I64 _i = NULL;
+    sockaddr_in c_addr;
+    sockaddr_in d_addr;
+
+    if (argc < 2)
+    {
+        return 0;
+    }
+    if (argc > 2)
+    {
+        return 0;
+    }
+   
+    c_addr.sin_family = AF_INET;
+    c_addr.sin_port = htons(21);
+    err = GetAddressForHost(argv[1], &c_addr.sin_addr);
+    if (!err)
+    {
+        err = connect(c_sock, &c_addr, sizeof(c_addr));
+        if (!err)
+        {
+
+            EConReadLine *ftp_rl = CAlloc(sizeof(EConReadLine));
+	        ftp_rl->history = CAlloc(sizeof(EConHistory));
+            ftp_rl->ac = CAlloc(sizeof(EConAutoComplete));
+
+            ConPrint(con, "Connected to %s.\n", argv[1]);
+            resp = _FTP_GetResponse(c_sock, con);
+            if (resp) { Free(resp); };
+
+            ConPrint(con, "Name (%s:%s): ", argv[1], wmgr->session->user);
+            im_pmt = ConReadLine(con, ftp_rl, 4096);
+            if (!StrLen(im_pmt))
+            {
+                StrPrint(im_pmt, wmgr->session->user);
+            }
+            StrPrint(ftp_cmd, "USER %s\r\n", im_pmt);
+            sendString(c_sock, ftp_cmd, 0);
+            resp = _FTP_GetResponse(c_sock, con);
+
+            if (resp[0] == '2' || resp[0] == '3' )
+            {
+                if (resp[0] == '3')
+                {
+                    Free(resp);
+                    ConPrint(con, "Password:");
+                    con->disable_echo = TRUE;
+                    im_pmt = ConReadLine(con, ftp_rl, 4096);
+                    ConPrint(con, "\n");
+                    con->disable_echo = FALSE;
+                    StrPrint(ftp_cmd, "PASS %s\r\n", im_pmt);
+                    sendString(c_sock, ftp_cmd, 0);
+                    resp = _FTP_GetResponse(c_sock, con);
+                }
+                else
+                {
+                    Free(resp);
+                }
+            }
+            else
+            {
+                Free(resp);
+                im_exit = TRUE;
+                goto ftp_im_loop;
+            }
+            if (resp[0] == '2')
+            {
+                Free(resp);
+            }
+            else
+            {
+                im_exit = TRUE;
+                goto ftp_im_loop;
+            }
+
+            StrPrint(ftp_cmd, "TYPE I\r\n");
+            sendString(c_sock, ftp_cmd, 0);
+            resp = _FTP_GetResponse(c_sock, con);
+            if (resp) { Free(resp); };
+
+            StrPrint(ftp_cmd, "");
+
+            while (!im_exit)
+            {
+                ConPrint(con, "ftp> ");
+                im_pmt = ConReadLine(con, ftp_rl, 4096);
+
+                im_argv = ParseArgs(im_pmt, &im_argc);
+
+                if (im_argc)
+                {
+                    if (!StrICmp(im_argv[0], "cd"))
+                    {
+                        if (im_argc>1)
+                        {
+                            StrPrint(ftp_cmd, "CWD %s\r\n", im_argv[1]);
+                            sendString(c_sock, ftp_cmd, 0);
+                            resp = _FTP_GetResponse(c_sock, con);                    
+                            Free(resp);
+                        }
+                        else
+                        {
+                            ConPrint(con, "usage: cd remote-directory\n");
+                        }                        
+                        goto ftp_im_loop;
+                    }
+                    if (!StrICmp(im_argv[0], "del"))
+                    {
+                        if (im_argc>1)
+                        {
+                            StrPrint(ftp_cmd, "DELE %s\r\n", im_argv[1]);
+                            sendString(c_sock, ftp_cmd, 0);
+                            resp = _FTP_GetResponse(c_sock, con);                    
+                            Free(resp);
+                        }
+                        else
+                        {
+                            ConPrint(con, "usage: del remote-file\n");
+                        }                        
+                        goto ftp_im_loop;
+                    }
+                    if (!StrICmp(im_argv[0], "dir") || !StrICmp(im_argv[0], "ls"))
+                    {
+                        StrPrint(ftp_cmd, "LIST\r\n");
+                        if (im_argc>1)
+                        {
+                            StrPrint(ftp_cmd, "LIST %s\r\n", im_argv[1]);
+                        }
+                        MemCpy(&d_addr, &c_addr, sizeof(sockaddr_in));
+                        d_port = _FTP_SetPassiveMode(c_sock, con);
+                        d_addr.sin_port = htons(d_port);
+                        sendString(c_sock, ftp_cmd, 0);
+                        resp = _FTP_GetResponse(c_sock, con);
+                        if (resp[0] == '1')
+                        {
+                            Free(resp);
+                            d_sock = socket(AF_INET, SOCK_STREAM);
+                            err = connect(d_sock, &d_addr, sizeof(d_addr));
+                            {
+                                if (err < 0)
+                                {
+                                    close(d_sock);
+                                    im_exit = TRUE;
+                                    goto ftp_im_loop;
+                                }
+                                err = recvLine(d_sock, ftp_res, 1024, 0);
+                                while (err>-1)
+                                {
+                                    ConPrint(con, "%s\n", ftp_res);
+                                    err = recvLine(d_sock, ftp_res, 1024, 0);
+                                }
+                                close(d_sock);
+                            }
+                            resp = _FTP_GetResponse(c_sock, con);
+                        }
+                        Free(resp);
+                        goto ftp_im_loop;
+                    }
+                    if (!StrICmp(im_argv[0], "get"))
+                    {
+                        if (im_argc>1)
+                        {
+                            StrPrint(ftp_cmd, "TYPE I\r\n");
+                            sendString(c_sock, ftp_cmd, 0);
+                            resp = _FTP_GetResponse(c_sock, con);
+                            if (resp) { Free(resp); };
+                            StrPrint(ftp_cmd, "SIZE %s\r\n", im_argv[1]);
+                            sendString(c_sock, ftp_cmd, 0);
+                            resp = _FTP_GetResponse(c_sock, con);
+                            if (resp[0] == '2')
+                            {
+                                size = Str2I64(resp + 4);
+                                Free(resp);
+                            }
+                            else
+                            {
+                                Free(resp);
+                                goto ftp_im_loop;
+                            }
+                            MemCpy(&d_addr, &c_addr, sizeof(sockaddr_in));
+                            d_port = _FTP_SetPassiveMode(c_sock, con);
+                            d_addr.sin_port = htons(d_port);
+                            StrPrint(ftp_cmd, "RETR %s\r\n", im_argv[1]);
+                            sendString(c_sock, ftp_cmd, 0);
+                            resp = _FTP_GetResponse(c_sock, con);
+                            if (resp[0] == '1')
+                            {
+                                Free(resp);
+                                d_sock = socket(AF_INET, SOCK_STREAM);
+                                err = connect(d_sock, &d_addr, sizeof(d_addr));
+                                {
+                                    if (err < 0)
+                                    {
+                                        close(d_sock);
+                                        im_exit = TRUE;
+                                        goto ftp_im_loop;
+                                    }
+                                    data = CAlloc(size);
+                                    got = 0;
+                                    step = 0;
+                                    total = 0;
+                                    while (total < size)
+                                    {
+                                        step = size - total;
+                                        if (step > 1024) { step = 1024; };
+                                        got = recv(d_sock, data + total, step, 0);
+                                        if (got <= 0)
+                                        {
+                                            Free(data);
+                                            close(d_sock);
+                                            im_exit = TRUE;
+                                            goto ftp_im_loop;
+                                        }
+                                        total += got;
+                                    }
+                                    FileWrite(cond(im_argc>2, im_argv[2], im_argv[1]), data, size);
+                                    Free(data);
+                                    close(d_sock);
+                                }
+                                resp = _FTP_GetResponse(c_sock, con);
+                            }
+                            Free(resp);                            
+                        }
+                        else
+                        {
+                            ConPrint(con, "usage: get remote-file [ local-file ]\n");
+                        }                        
+                        goto ftp_im_loop;
+                    }
+                    if (!StrICmp(im_argv[0], "mkdir"))
+                    {
+                        if (im_argc>1)
+                        {
+                            StrPrint(ftp_cmd, "MKD %s\r\n", im_argv[1]);
+                            sendString(c_sock, ftp_cmd, 0);
+                            resp = _FTP_GetResponse(c_sock, con);                    
+                            Free(resp);
+                        }
+                        else
+                        {
+                            ConPrint(con, "usage: mkdir directory-name\n");
+                        }                        
+                        goto ftp_im_loop;
+                    }
+                    if (!StrICmp(im_argv[0], "pwd"))
+                    {
+                        sendString(c_sock, "PWD\r\n", 0);
+                        resp = _FTP_GetResponse(c_sock, con);                    
+                        Free(resp);
+                        goto ftp_im_loop;
+                    }
+                    if (!StrICmp(im_argv[0], "put"))
+                    {
+                        if (im_argc>1)
+                        {
+                            ConPrint(con, "local: %s remote: %s\n", im_argv[1], cond(im_argc>2, im_argv[2], im_argv[1]));
+                            if (!FileFind(im_argv[1]))
+                            {
+                                ConPrint(con, "local: %s: No such file or directory\n", im_argv[1]);
+                                goto ftp_im_loop;
+                            }
+                            StrPrint(ftp_cmd, "TYPE I\r\n");
+                            sendString(c_sock, ftp_cmd, 0);
+                            resp = _FTP_GetResponse(c_sock, con);
+                            if (resp) { Free(resp); };
+                            MemCpy(&d_addr, &c_addr, sizeof(sockaddr_in));
+                            d_port = _FTP_SetPassiveMode(c_sock, con);
+                            d_addr.sin_port = htons(d_port);
+                            StrPrint(ftp_cmd, "STOR %s\r\n", cond(im_argc>2, im_argv[2], im_argv[1]));
+                            sendString(c_sock, ftp_cmd, 0);
+                            resp = _FTP_GetResponse(c_sock, con);
+                            if (resp[0] == '1')
+                            {
+                                Free(resp);
+                                d_sock = socket(AF_INET, SOCK_STREAM);
+                                err = connect(d_sock, &d_addr, sizeof(d_addr));
+                                {
+                                    if (err < 0)
+                                    {
+                                        close(d_sock);
+                                        im_exit = TRUE;
+                                        goto ftp_im_loop;
+                                    }
+                                    err = 0;
+                                    got = 0;
+                                    step = 0;
+                                    total = 0;
+                                    data = FileRead(im_argv[1], &size);
+                                    while (total < size)
+                                    {
+                                        step = size - total;
+                                        if (step > 1024) { step = 1024; };
+                                        err = send(d_sock, data + total, step, 0);
+                                        if (err < 0)
+                                        {
+                                            Free(data);
+                                            close(d_sock);
+                                            im_exit = TRUE;
+                                            goto ftp_im_loop;
+                                        }
+                                        total += step;
+                                    }
+                                    Free(data);
+                                    close(d_sock);
+                                }
+                                resp = _FTP_GetResponse(c_sock, con);
+                            }
+                            Free(resp);
+                        }
+                        else
+                        {
+                            ConPrint(con, "usage: put local-file remote-file\n");
+                        }                        
+                        goto ftp_im_loop;
+                    }
+                    if (!StrICmp(im_argv[0], "rm"))
+                    {
+                        if (im_argc>1)
+                        {
+                            StrPrint(ftp_cmd, "DELE %s\r\n", im_argv[1]);
+                            sendString(c_sock, ftp_cmd, 0);
+                            resp = _FTP_GetResponse(c_sock, con);                    
+                            Free(resp);
+                        }
+                        else
+                        {
+                            ConPrint(con, "usage: rm remote-file\n");
+                        }                        
+                        goto ftp_im_loop;
+                    }
+                    if (!StrICmp(im_argv[0], "rmdir"))
+                    {
+                        if (im_argc>1)
+                        {
+                            StrPrint(ftp_cmd, "RMD %s\r\n", im_argv[1]);
+                            sendString(c_sock, ftp_cmd, 0);
+                            resp = _FTP_GetResponse(c_sock, con);                    
+                            Free(resp);
+                        }
+                        else
+                        {
+                            ConPrint(con, "usage: rmdir directory-name\n");
+                        }                        
+                        goto ftp_im_loop;
+                    }
+                    if (!StrICmp(im_argv[0], "exit") || !StrICmp(im_argv[0], "quit"))
+                    {
+                        im_exit = TRUE;
+                        goto ftp_im_loop;
+                    }
+                    ConPrint(con, "?Invalid command\n");                    
+                }
+ftp_im_loop:
+                FreeArgs(im_argc, im_argv);
+                if (im_pmt)
+                {
+                    Free(im_pmt);
+                }
+            }
+            sendString(c_sock, "QUIT\r\n", 0);
+            resp = _FTP_GetResponse(c_sock, con);
+            if (resp) { Free(resp); };
+            Free(ftp_rl->ac);
+            Free(ftp_rl->history);
+            Free(ftp_rl);            
+            close(c_sock);
+            Free(ftp_cmd);
+            return 0;
+        }
+        close(c_sock);
+        Free(ftp_cmd);
+        return 1;
+    }
+    Free(ftp_cmd);
+    return 1;
 }
 
 I64 CCMD_history(EConsole *con, I64 argc, U8 **argv)
@@ -1035,8 +1485,8 @@ I64 CCMD_nslookup(EConsole *con, I64 argc, U8 **argv)
     ConPrint(con, "Address:        %d.%d.%d.%d#53\n\n",
         dns_ip.u8[3], dns_ip.u8[2], dns_ip.u8[1], dns_ip.u8[0]);
 
-    I64 error = getaddrinfo(argv[1], NULL, NULL, &res);
-    if (!error)
+    I64 err = getaddrinfo(argv[1], NULL, NULL, &res);
+    if (!err)
     {
         ConPrint(con, "Non-authoritative answer:\n");
         res_ip = (res->ai_addr(sockaddr_in*))->sin_addr.s_addr;
@@ -1062,9 +1512,10 @@ I64 CCMD_ping(EConsole *con, I64 argc, U8 **argv)
 {
     CIPv4Packet *ipv4_pkt;
     CIcmpHeader *icmp_hdr;
-    U32 res_ip = 0;
+    U32 res_ip = NULL;
     I64 cnt = 0;
     I64 echo_size = 48;
+    I64 timeout = 0;
     U16 iden = (RandU16 * SysTimerRead) & 0xFFFF;
     U16 seq = 0;
     I64 time_req, time_resp;
@@ -1074,13 +1525,9 @@ I64 CCMD_ping(EConsole *con, I64 argc, U8 **argv)
     {
         return 0;
     }
-
-    addrinfo* res = NULL;
-    I64 error = getaddrinfo(argv[1], NULL, NULL, &res);
+    I64 error = GetAddressForHost(argv[1], &res_ip);
     if (!error)
     {
-        res_ip = (res->ai_addr(sockaddr_in*))->sin_addr.s_addr;
-
         ConPrint(con, "PING %s (%d.%d.%d.%d): %d data bytes\n",
             argv[1], res_ip.u8[0], res_ip.u8[1], res_ip.u8[2], res_ip.u8[3], echo_size + 8);
         while (cnt<4) // testing
@@ -1088,35 +1535,40 @@ I64 CCMD_ping(EConsole *con, I64 argc, U8 **argv)
             icmp_reply[iden] = NULL;
             IcmpSendRequest(htonl(res_ip), iden, seq, 0, data, echo_size);
             time_req = cnts.jiffies;
-            while (!icmp_reply[iden])
+            timeout = 0;
+            while (!icmp_reply[iden] && timeout<1000)
             {
                 Sleep(1);
+                timeout++;
             }
-            ipv4_pkt = icmp_reply[iden];
-            icmp_hdr = ipv4_pkt->data;
-            time_resp = cnts.jiffies;
-            ConPrint(con, "%d bytes from %d.%d.%d.%d: icmp_seq=%d ttl=%d time=%d ms\n",
-                ipv4_pkt->length + 8,
-                res_ip.u8[0], res_ip.u8[1], res_ip.u8[2], res_ip.u8[3], 
-                icmp_hdr->seq_number, ipv4_pkt->ttl, time_resp-time_req);
+            if (timeout<1000)
+            {
+                ipv4_pkt = icmp_reply[iden];
+                icmp_hdr = ipv4_pkt->data;
+                time_resp = cnts.jiffies;
+                ConPrint(con, "%d bytes from %d.%d.%d.%d: icmp_seq=%d ttl=%d time=%d ms\n",
+                    ipv4_pkt->length + 8,
+                    res_ip.u8[0], res_ip.u8[1], res_ip.u8[2], res_ip.u8[3], 
+                    icmp_hdr->seq_number, ipv4_pkt->ttl, time_resp-time_req);
+            }
+            else
+            {
+                ConPrint(con, "no answer yet for icmp_seq=%d\n", seq);
+                timeout = 500;
+            }
             seq++;
             cnt++;
             if (cnt<4) // testing
             {
-                Sleep(1000);
+                Sleep(1000 - timeout);
             }
-        }
-
-        if (res)
-        {
-            freeaddrinfo(res);
         }
         ConPrint(con, "\n");
         return 0;
     }
-    if (res)
+    else
     {
-        freeaddrinfo(res);
+        ConPrint(con, "ping: %s: Name or service not known\n", argv[1]);
     }
     return 0;
 }
