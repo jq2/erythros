@@ -134,6 +134,26 @@ lspci_lud_done:
   DocDel(doc);
 }
 
+I64 CCMD_bgfill(EConsole *con, I64 argc, U8 **argv)
+{
+    if (argc < 2)
+    {
+        goto bgfill_usage;
+    }
+    if (argv[1][0] != '#' || StrLen(argv[1]) != 7)
+    {
+bgfill_usage:
+        ConPrint(con, "usage: bgfill #rrggbb\n");
+        return 1;
+    }
+    U32 col = hex2int(argv[1]+1);
+    if (col == U32_MAX) { goto bgfill_usage; };
+    U32 bgcol = 0;
+    MemCpy(&bgcol.u8[1], &col.u8[0], 3);
+    Fill2D(wmgr->wallpaper, bgcol);
+    return 0;
+}
+
 I64 CCMD_bgset(EConsole *con, I64 argc, U8 **argv)
 {
     EContext2D *bg;
@@ -397,8 +417,8 @@ I64 CCMD_ftp(EConsole *con, I64 argc, U8 **argv)
                     ConPrint(con, "Password:");
                     con->disable_echo = TRUE;
                     im_pmt = ConReadLine(con, ftp_rl, 4096);
-                    ConPrint(con, "\n");
                     con->disable_echo = FALSE;
+                    ConPrint(con, "\n");                    
                     StrPrint(ftp_cmd, "PASS %s\r\n", im_pmt);
                     sendString(c_sock, ftp_cmd, 0);
                     resp = _FTP_GetResponse(c_sock, con);
@@ -1673,6 +1693,41 @@ I64 CCMD_uname(EConsole *con, I64 argc, U8 **argv)
     Free(tmp);
     Free(ds);
     return 0;
+}
+
+I64 CCMD_unzip(EConsole *con, I64 argc, U8 **argv)
+{
+    I64 retval = 1;
+    if (argc < 2)
+    {
+        ConPrint(con, "usage: unzip zip-file\n");
+        return retval;
+    }
+    JZFile *zip;
+    JZEndRecord endRecord;
+    if (!FileFind(argv[1]))
+    {
+        ConPrint(con, "Couldn't open \"%s\"!\n", argv[1]);
+        return retval;
+    }
+    zip = jzfile_from_file(argv[1]);
+    ConPrint(con, "Archive:  %s\n", argv[1]);
+    if(jzReadEndRecord(zip, &endRecord))
+    {
+        ConPrint(con, "Couldn't read ZIP file end record.\n");
+        goto unzip_end_close;
+    }
+    if(jzReadCentralDirectory(con, zip, &endRecord, NULL))
+    {
+        ConPrint(con, "Couldn't read ZIP file central record.\n");
+        goto unzip_end_close;
+    }    
+    retval = 0;
+unzip_end_close:
+    StdioJZFile *f = zip->addr;
+    Free(f->buf);
+    Free(f);
+    return retval;
 }
 
 I64 CCMD_who(EConsole *con, I64 argc, U8 **argv)

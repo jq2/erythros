@@ -218,6 +218,11 @@ U0 VirtioNetRxHandler()
     idx_rec = virtio_net.rq_index;
     idx_used = virtio_net.rq->used.index;
 
+    if (idx_used < idx_rec)
+    {
+      idx_used += 0x10000;
+    }
+
     if (idx_rec != idx_used && idx_used)
     {
 
@@ -232,7 +237,7 @@ U0 VirtioNetRxHandler()
         virtio_net.rx_packets++;
         virtio_net.rx_bytes += length-10;
       }
-      virtio_net.rq_index = idx_used;
+      virtio_net.rq_index = idx_used%0x10000;
       virtio_net.rq->available.index += j;
       OutU16(virtio_net.port + VIRTIO_PCI_QUEUE_NOTIFY, 0);  
     }

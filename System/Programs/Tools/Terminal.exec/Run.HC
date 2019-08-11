@@ -2,6 +2,7 @@
 
 #include "FixedWidthFont";
 #include "Console";
+#include "/System/Libraries/JUnzip";
 
 U64 ccmd_table = Fs->hash_table;
 EConReadLine *shell_rl = CAlloc(sizeof(EConReadLine));

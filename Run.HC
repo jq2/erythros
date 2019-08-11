@@ -13,7 +13,7 @@
 #include "System/Libraries/Display";
 #include "System/Libraries/Mouse";
 #include "System/Libraries/Graphics2D";
-#include "System/Libraries/JPEG";
+//#include "System/Libraries/JPEG";
 #include "System/Libraries/uPNG";
 #include "System/Libraries/GUI";
 
