@@ -82,7 +82,7 @@ class EConReadLine
     Bool multi_ac;
 };
 
-EContext2D *term_ctx = NewContext2D(display.width, display.height, display.bpp);
+//EContext2D *con->term_ctx = NewContext2D(display.width, display.height, display.bpp);
 
 U32 ConColPeek(U32 *buf, I64 x, I64 y)
 {
@@ -159,7 +159,7 @@ U0 ConClear(EConsole *con)
 	for (_i=0;_i<display.width*128;_i++)
 	{
 		con->fg_buf[_i]=0xFFFFFF00;
-		con->bg_buf[_i]=0x00000000;
+		con->bg_buf[_i]=con->fill_color;
 	}
     con->scroll_x=0;
     con->scroll_y=0;
@@ -762,7 +762,11 @@ U0 DrawConsoles(EConsole *consoles)
         con = consoles->next;
         while (con)
         {
-            Fill2D(term_ctx, 0);
+            if (!con->wgt)
+            {
+                goto skip_update_con;
+            }            
+            Fill2D(con->term_ctx, con->fill_color);
             for (by=0;by<con->ch_height;by++)
             {
                 for (bx=0;bx<con->ch_width;bx++)
@@ -774,45 +778,51 @@ U0 DrawConsoles(EConsole *consoles)
                         fg = con->fg_hilight;
                         bg = con->bg_hilight;
                     }
-                    ETEDrawChar(term_ctx, bx*6, by*12, GrPeek(con->ch_buf, con->scroll_x+bx, con->scroll_y+by),
+                    ETEDrawChar(con->term_ctx, bx*6, by*12, GrPeek(con->ch_buf, con->scroll_x+bx, con->scroll_y+by),
                         fg, bg);
                 }
             }
 
-            for (by=0;by<con->win->height;by++)  
-            {   
-                for (bx=0;bx<con->win->width;bx++)   
+            if (con->win->has_alpha)
+            {
+                for (by=0;by<con->win->height;by++)  
                 {   
-                    bc1=Peek2D(term_ctx, bx, by);
-                    bc2=Peek2D(con->win->alpha_ctx, con->wgt->x+bx, con->wgt->y+by);  
-                    bc3.u8[1] = (bc2.u8[1] * 0.25) + (bc1.u8[1] * (1.0 - 0.25));    
-                    bc3.u8[2] = (bc2.u8[2] * 0.25) + (bc1.u8[2] * (1.0 - 0.25));    
-                    bc3.u8[3] = (bc2.u8[3] * 0.25) + (bc1.u8[3] * (1.0 - 0.25));    
-                    Plot2D(term_ctx, bx, by, bc3);   
+                    for (bx=0;bx<con->win->width;bx++)   
+                    {   
+                        bc1=Peek2D(con->term_ctx, bx, by);
+                        bc2=Peek2D(con->win->alpha_ctx, con->wgt->x+bx, con->wgt->y+by);  
+                        bc3.u8[1] = (bc2.u8[1] * 0.25) + (bc1.u8[1] * (1.0 - 0.25));    
+                        bc3.u8[2] = (bc2.u8[2] * 0.25) + (bc1.u8[2] * (1.0 - 0.25));    
+                        bc3.u8[3] = (bc2.u8[3] * 0.25) + (bc1.u8[3] * (1.0 - 0.25));    
+                        Plot2D(con->term_ctx, bx, by, bc3);   
+                    }   
                 }   
-            }   
 
-            for (by=0;by<con->ch_height;by++)
-            { // Draw foreground text without alpha
-                for (bx=0;bx<con->ch_width;bx++)
-                {
-                    fg = ConColPeek(con->fg_buf, con->scroll_x+bx, con->scroll_y+by);
-                    if (CharIsHilighted(con, con->scroll_x+bx, con->scroll_y+by))
+                for (by=0;by<con->ch_height;by++)
+                { // Draw foreground text without alpha
+                    for (bx=0;bx<con->ch_width;bx++)
                     {
-                        fg = con->fg_hilight;
+                        fg = ConColPeek(con->fg_buf, con->scroll_x+bx, con->scroll_y+by);
+                        if (CharIsHilighted(con, con->scroll_x+bx, con->scroll_y+by))
+                        {
+                            fg = con->fg_hilight;
+                        }
+                        ETEDrawChar(con->term_ctx, bx*6, by*12, GrPeek(con->ch_buf, con->scroll_x+bx, con->scroll_y+by),
+                            fg, -1);
                     }
-                    ETEDrawChar(term_ctx, bx*6, by*12, GrPeek(con->ch_buf, con->scroll_x+bx, con->scroll_y+by),
-                        fg, -1);
                 }
             }
             
-            if (Blink || wmgr->active_key)
+            if ((Blink || wmgr->active_key) && !con->disable_cursor)
             {
-                Rect2D(term_ctx, con->screen_x*6, con->screen_y*12, 6, 12, con->fg_color);
+                Rect2D(con->term_ctx, con->screen_x*6, con->screen_y*12, 6, 12, con->fg_color);
             }
 
-            CopyRect2D(con->wgt->ctx, 0, 0, term_ctx);
-
+            if (con->wgt)
+            {
+                CopyRect2D(con->wgt->ctx, 0, 0, con->term_ctx);
+            }
+skip_update_con:            
             con=con->next;
         }
 

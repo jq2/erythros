@@ -1,4 +1,4 @@
-EContext2D *font_fw812_ctx = LoadPNG("FixedWidthFont.png");
+EContext2D *font_fw812_ctx = LoadPNG("/System/Programs/Tools/Terminal.exec/FixedWidthFont.png");
 
 I64 font_ox, font_oy;
 I64 font_sx, font_sy;

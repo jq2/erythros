@@ -392,7 +392,6 @@ U0 EWMDelWindow(EWindow *win)
 	//wmgr->refresh_taskmenu=TRUE;
 }
 
-
 U0 AddConsole(EConsole *consoles, EConsole *con)
 {
 	if (!consoles)
@@ -405,7 +404,6 @@ U0 AddConsole(EConsole *consoles, EConsole *con)
 	}
 	consoles->next=con;
 }
-
 
 U0 DelConsole(EConsole *con)
 {
@@ -420,6 +418,7 @@ U0 DelConsole(EConsole *con)
 	if (con->stdin) { FifoU8Del(con->stdin); };
 	if (con->stdout) { FifoU8Del(con->stdout); };
 	if (con->stderr) { FifoU8Del(con->stderr); };
+	DelContext2D(con->term_ctx);
 	Free(con);
 }
 
@@ -428,6 +427,7 @@ EConsole *NewConsole(EWindow *win, EWidget *wgt)
 	I64 _i;
 
 	EConsole *con=CAlloc(sizeof(EConsole));
+	con->term_ctx = NewContext2D(display.width, display.height, display.bpp);
 	
 	con->win=win;
 	con->wgt=wgt;
@@ -631,6 +631,9 @@ U0 EWMUpdateMenuBarClock(CDateStruct *ds)
 	{
 	case 0:
 		StrPrint(menu_clock->text, "%2d:%02d AM", ds->hour+12, ds->min);
+		break;
+	case 12:
+		StrPrint(menu_clock->text, "%2d:%02d PM", ds->hour, ds->min);
 		break;
 	case 13 ... 23:
 		StrPrint(menu_clock->text, "%2d:%02d PM", ds->hour-12, ds->min);

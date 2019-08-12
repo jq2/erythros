@@ -1,7 +1,5 @@
 // Erythros Terminal
 
-#include "FixedWidthFont";
-#include "Console";
 #include "/System/Libraries/JUnzip";
 
 U64 ccmd_table = Fs->hash_table;
@@ -65,7 +63,7 @@ EWMShow(my_win);
 
 EWidget *my_ctx = EWMNewWidget(EWGT_CONTEXT2D, 4, 24, 420, 240);
 my_ctx->ctx = NewContext2D(display.width, display.height, display.bpp);
-Fill2D(term_ctx, 0);
+//Fill2D(term_ctx, 0);
 EWMAddWidget(my_win, my_ctx);
 
 EConsole *consoles_head = CAlloc(sizeof(EConsole));

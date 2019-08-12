@@ -219,6 +219,8 @@ class EConsole
     //U8 *screen_buf;
     //U8 *scroll_buf;
 	Bool disable_echo;
+	Bool disable_cursor;
+	U32 fill_color;
 	U32 fg_color;
 	U32 bg_color;
 	U32 fg_hilight;
@@ -236,6 +238,8 @@ class EConsole
 	I64 screen_y;
 	I64 scroll_x;
 	I64 scroll_y;
+	Bool new;
+	EContext2D *term_ctx;
     CFifoU8 *stdin;
     CFifoU8 *stdout;
     CFifoU8 *stderr;

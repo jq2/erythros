@@ -17,6 +17,9 @@
 #include "System/Libraries/uPNG";
 #include "System/Libraries/GUI";
 
+#include "/System/Programs/Tools/Terminal.exec/FixedWidthFont.HC";
+#include "/System/Programs/Tools/Terminal.exec/Console.HC";
+
 #include "System/Drivers/Net/NetFifo";
 #include "System/Drivers/Net/NativeSocket";
 #include "System/Drivers/Net/Socket";
