@@ -1,7 +1,7 @@
 # erythros
 An operating system based on TempleOS
 
-![Erythros](https://raw.githubusercontent.com/obecebo/erythros/master/preview.png?)
+![Erythros](https://raw.githubusercontent.com/obecebo/erythros/master/preview.png)
 
 This is a work in progress - more information will be added as it becomes available.
 
